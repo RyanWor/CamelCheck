@@ -10,6 +10,23 @@ enum ExternalURLs {
     static let camelSearch  = "https://camelcamelcamel.com/search?sq="
 }
 
+/// Validation errors for URL checking
+enum URLValidationError: LocalizedError {
+    case empty
+    case malformed
+    case invalidScheme
+    case missingHost
+
+    var errorDescription: String? {
+        switch self {
+        case .empty:         return "URL is empty"
+        case .malformed:     return "Not a valid URL"
+        case .invalidScheme: return "URL must start with http:// or https://"
+        case .missingHost:   return "URL has no host"
+        }
+    }
+}
+
 /// Extracts Amazon ASIN codes from various URL formats
 enum AmazonURLParser {
 
@@ -24,14 +41,14 @@ enum AmazonURLParser {
     }
 
     /// Validates that a URL string has a proper scheme and host
-    static func validate(_ urlString: String) -> Result<URL, String> {
+    static func validate(_ urlString: String) -> Result<URL, URLValidationError> {
         let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return .failure("URL is empty") }
-        guard let url = URL(string: trimmed) else { return .failure("Not a valid URL") }
+        guard !trimmed.isEmpty else { return .failure(.empty) }
+        guard let url = URL(string: trimmed) else { return .failure(.malformed) }
         guard let scheme = url.scheme?.lowercased(), scheme == "https" || scheme == "http" else {
-            return .failure("URL must start with http:// or https://")
+            return .failure(.invalidScheme)
         }
-        guard let host = url.host, !host.isEmpty else { return .failure("URL has no host") }
+        guard let host = url.host, !host.isEmpty else { return .failure(.missingHost) }
         return .success(url)
     }
 
@@ -57,7 +74,6 @@ enum AmazonURLParser {
         if isShortURL(url) { return nil }
 
         let urlString = url.absoluteString
-
         let dpPatterns = [
             #"/dp/([A-Z0-9]{10})"#,
             #"/gp/product/([A-Z0-9]{10})"#,
@@ -130,12 +146,9 @@ private class RedirectCaptureDelegate: NSObject, URLSessionTaskDelegate {
     let handler: (URL?) -> Void
     private var handled = false
 
-    init(handler: @escaping (URL?) -> Void) {
-        self.handler = handler
-    }
+    init(handler: @escaping (URL?) -> Void) { self.handler = handler }
 
-    func urlSession(_ session: URLSession,
-                    task: URLSessionTask,
+    func urlSession(_ session: URLSession, task: URLSessionTask,
                     willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest,
                     completionHandler: @escaping (URLRequest?) -> Void) {

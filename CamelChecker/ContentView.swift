@@ -150,9 +150,9 @@ struct ContentView: View {
 
         // Validate before doing anything
         switch AmazonURLParser.validate(trimmed) {
-        case .failure(let reason):
+        case .failure(let error):
             isLoading = false
-            errorMessage = reason
+            errorMessage = error.errorDescription ?? "Invalid URL"
             return
         case .success(let url):
             processURL(url)

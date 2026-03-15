@@ -152,9 +152,9 @@ class ShareViewController: UIViewController {
     private func handleURL(_ url: URL) {
         // Validate before proceeding
         switch AmazonURLParser.validate(url.absoluteString) {
-        case .failure(let reason):
-            logger.warning("URL validation failed: \(reason)")
-            showError("Invalid URL: \(reason)")
+        case .failure(let error):
+            logger.warning("URL validation failed: \(error.localizedDescription)")
+            showError("Invalid URL: \(error.errorDescription ?? "Unknown")")
             return
         case .success:
             break

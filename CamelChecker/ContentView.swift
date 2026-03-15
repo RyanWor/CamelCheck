@@ -1,4 +1,7 @@
 import SwiftUI
+import OSLog
+
+private let logger = Logger(subsystem: "com.yourname.camelchecker", category: "ContentView")
 
 struct ContentView: View {
     @State private var amazonURL: String = ""
@@ -9,9 +12,7 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            // Background
-            Color(hex: "#0D0D0D")
-                .ignoresSafeArea()
+            Color(hex: "#0D0D0D").ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // Header
@@ -27,14 +28,14 @@ struct ContentView: View {
                     .padding(.top, 60)
 
                     Text("Amazon Price History Lookup")
-                        .font(.custom("Georgia", size: 13))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundColor(Color(hex: "#888888"))
                         .tracking(1.2)
                         .textCase(.uppercase)
                 }
                 .padding(.bottom, 40)
 
-                // Instructions Card
+                // Instructions card
                 VStack(alignment: .leading, spacing: 16) {
                     Label("How to use", systemImage: "info.circle")
                         .font(.system(size: 13, weight: .semibold))
@@ -51,15 +52,12 @@ struct ContentView: View {
                 .padding(20)
                 .background(Color(hex: "#1A1A1A"))
                 .cornerRadius(14)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(Color(hex: "#2A2A2A"), lineWidth: 1)
-                )
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(hex: "#2A2A2A"), lineWidth: 1))
                 .padding(.horizontal, 24)
 
                 Spacer().frame(height: 30)
 
-                // Manual URL Input
+                // Manual URL input
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Or paste an Amazon URL")
                         .font(.system(size: 12, weight: .medium))
@@ -81,10 +79,7 @@ struct ContentView: View {
 
                         Button(action: lookupURL) {
                             if isLoading {
-                                ProgressView()
-                                    .tint(.white)
-                                    .scaleEffect(0.8)
-                                    .frame(width: 52, height: 52)
+                                ProgressView().tint(.white).scaleEffect(0.8).frame(width: 52, height: 52)
                             } else {
                                 Image(systemName: "arrow.right")
                                     .font(.system(size: 16, weight: .bold))
@@ -97,19 +92,15 @@ struct ContentView: View {
                     }
                     .background(Color(hex: "#1A1A1A"))
                     .cornerRadius(12)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(fieldFocused ? Color(hex: "#FF6B35").opacity(0.6) : Color(hex: "#2A2A2A"), lineWidth: 1)
-                    )
+                    .overlay(RoundedRectangle(cornerRadius: 12)
+                        .stroke(fieldFocused ? Color(hex: "#FF6B35").opacity(0.6) : Color(hex: "#2A2A2A"), lineWidth: 1))
                     .padding(.horizontal, 24)
                 }
 
-                // Error / ASIN display
                 if let error = errorMessage {
-                    HStack {
+                    HStack(spacing: 8) {
                         Image(systemName: "exclamationmark.triangle")
-                        Text(error)
-                            .font(.system(size: 13))
+                        Text(error).font(.system(size: 13))
                     }
                     .foregroundColor(Color(hex: "#FF4444"))
                     .padding(.top, 14)
@@ -133,7 +124,6 @@ struct ContentView: View {
 
                 Spacer()
 
-                // Footer
                 VStack(spacing: 4) {
                     Text("Powered by CamelCamelCamel")
                         .font(.system(size: 11))
@@ -145,10 +135,10 @@ struct ContentView: View {
                 .padding(.bottom, 30)
             }
         }
-        .onOpenURL { url in
-            handleIncomingURL(url)
-        }
+        .onOpenURL { url in handleIncomingURL(url) }
     }
+
+    // MARK: - Actions
 
     func lookupURL() {
         fieldFocused = false
@@ -157,23 +147,28 @@ struct ContentView: View {
         isLoading = true
 
         let trimmed = amazonURL.trimmingCharacters(in: .whitespaces)
-        guard let url = URL(string: trimmed) else {
-            isLoading = false
-            errorMessage = "That doesn't look like a valid URL."
-            return
-        }
 
-        // If it's a short link, resolve it first
+        // Validate before doing anything
+        switch AmazonURLParser.validate(trimmed) {
+        case .failure(let reason):
+            isLoading = false
+            errorMessage = reason
+            return
+        case .success(let url):
+            processURL(url)
+        }
+    }
+
+    private func processURL(_ url: URL) {
         if AmazonURLParser.isShortURL(url) {
-            AmazonURLParser.resolveShortURL(url) { [self] resolvedURL in
+            AmazonURLParser.resolveShortURL(url) { resolvedURL in
                 DispatchQueue.main.async {
                     if let resolved = resolvedURL {
-                        self.processResolvedURL(resolved)
+                        self.processURL(resolved)
                     } else {
-                        // Can't resolve — just open CCC search as fallback
                         self.isLoading = false
-                        let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-                        if let searchURL = URL(string: "https://camelcamelcamel.com/search?sq=\(encoded)") {
+                        // Fall back to CamelCamelCamel search
+                        if let searchURL = AmazonURLParser.camelSearchURL(for: url.absoluteString) {
                             UIApplication.shared.open(searchURL)
                         } else {
                             self.errorMessage = "Couldn't resolve that short link."
@@ -181,35 +176,32 @@ struct ContentView: View {
                     }
                 }
             }
-        } else {
-            processResolvedURL(url)
+            return
         }
-    }
 
-    private func processResolvedURL(_ url: URL) {
         isLoading = false
+
         if let detectedASIN = AmazonURLParser.extractASIN(from: url) {
             asin = detectedASIN
-            let camelURL = URL(string: "https://camelcamelcamel.com/product/\(detectedASIN)")!
-            UIApplication.shared.open(camelURL)
+            if let camelURL = AmazonURLParser.camelURL(for: detectedASIN) {
+                UIApplication.shared.open(camelURL)
+            }
         } else if AmazonURLParser.isAmazonURL(url) {
-            // Amazon URL but no ASIN — fall back to CCC search
-            let encoded = url.absoluteString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-            if let searchURL = URL(string: "https://camelcamelcamel.com/search?sq=\(encoded)") {
+            if let searchURL = AmazonURLParser.camelSearchURL(for: url.absoluteString) {
                 UIApplication.shared.open(searchURL)
             }
         } else {
+            logger.warning("Not an Amazon URL: \(url.absoluteString)")
             errorMessage = "Couldn't find an ASIN in that URL. Make sure it's a valid Amazon product link."
         }
     }
 
     func handleIncomingURL(_ url: URL) {
-        // Handle deep link from share extension: camelcheck://asin/XXXXXXXXXX
-        if url.scheme == "camelcheck", url.host == "asin" {
-            let detectedASIN = url.lastPathComponent
-            guard !detectedASIN.isEmpty else { return }
-            asin = detectedASIN
-            let camelURL = URL(string: "https://camelcamelcamel.com/product/\(detectedASIN)")!
+        guard url.scheme == "camelcheck", url.host == "asin" else { return }
+        let detectedASIN = url.lastPathComponent
+        guard !detectedASIN.isEmpty else { return }
+        asin = detectedASIN
+        if let camelURL = AmazonURLParser.camelURL(for: detectedASIN) {
             UIApplication.shared.open(camelURL)
         }
     }
@@ -218,7 +210,6 @@ struct ContentView: View {
 struct InstructionRow: View {
     let number: String
     let text: String
-
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Text(number)
@@ -227,7 +218,6 @@ struct InstructionRow: View {
                 .frame(width: 20, height: 20)
                 .background(Color(hex: "#FF6B35").opacity(0.12))
                 .cornerRadius(4)
-
             Text(text)
                 .font(.system(size: 14))
                 .foregroundColor(Color(hex: "#AAAAAA"))
@@ -246,18 +236,10 @@ extension Color {
         case 3: (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
         case 6: (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
         case 8: (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
-        default: (a, r, g, b) = (1, 1, 1, 0)
+        default: (a, r, g, b) = (255, 255, 255, 255)
         }
-        self.init(
-            .sRGB,
-            red: Double(r) / 255,
-            green: Double(g) / 255,
-            blue: Double(b) / 255,
-            opacity: Double(a) / 255
-        )
+        self.init(.sRGB, red: Double(r)/255, green: Double(g)/255, blue: Double(b)/255, opacity: Double(a)/255)
     }
 }
 
-#Preview {
-    ContentView()
-}
+#Preview { ContentView() }

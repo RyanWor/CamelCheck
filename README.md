@@ -133,3 +133,9 @@ let camelURLString = "https://camelcamelcamel.com/product/\(asin)"
 - CamelCamelCamel primarily tracks **US Amazon** products. For international ASINs, the lookup may not have data.
 - This app is not affiliated with Amazon or CamelCamelCamel.
 - Share Extensions cannot directly open URLs in iOS — the extension dismisses and the URL opens via the responder chain trick (standard workaround).
+
+---
+
+## About
+
+This app was built entirely with AI assistance using **Claude Sonnet 4.6** by [Anthropic](https://www.anthropic.com). The full app — including Swift source code, Share Extension, ASIN parsing logic, URL handling, app icon, and Xcode project structure — was generated through a conversational session with Claude via [claude.ai](https://claude.ai).
